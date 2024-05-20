@@ -52,9 +52,13 @@ func main() {
 	}
 	defer db.Close()
 
-	// GET endpoint to get recipes
 	r := mux.NewRouter()
+
+	// GET endpoint to get recipes
 	r.HandleFunc("/recipes", getRecipes).Methods("GET")
+
+	// DELETE endpoint to remove a recipe
+	r.HandleFunc("/recipes", deleteRecipe).Methods("DELETE")
 
 	// Start the local server
 	log.Println("Server is running on port 3000")
@@ -91,4 +95,33 @@ func getRecipes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(recipes)
+}
+
+func deleteRecipe(w http.ResponseWriter, r *http.Request) {
+	// Retrieve ID from query params
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing Recipe ID", http.StatusBadRequest)
+		return
+	}
+
+	// Delete a recipe from the database with the given ID
+	result, err := db.Exec("DELETE FROM Recipes WHERE id = $1", id)
+	if err != nil {
+		http.Error(w, "Failed to delete Recipe", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, "Failed to get affected rows", http.StatusInternalServerError)
+		return
+	}
+	
+	if rowsAffected == 0 {
+		http.Error(w, "No recipe found with the given ID", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

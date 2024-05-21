@@ -27,10 +27,10 @@ var db *sql.DB
 
 func main() {
 	// Load environment variables from .env file
-    err := godotenv.Load()
-    if err != nil {
-        log.Fatal("Error loading .env file")
-    }
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	// Get environment variables
 	dbUser := os.Getenv("DB_USER")
@@ -40,7 +40,7 @@ func main() {
 
 	// Create the connection string
 	connStr := "user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " port=" + dbPort + " sslmode=disable"
-	
+
 	// Connect to the Database
 	db, err = sql.Open("postgres", connStr)
 	if err != nil {
@@ -59,6 +59,9 @@ func main() {
 
 	// DELETE endpoint to remove a recipe
 	r.HandleFunc("/recipes", deleteRecipe).Methods("DELETE")
+
+	// POST endpoint to create a recipe
+	r.HandleFunc("/recipes", createRecipe).Methods("POST")
 
 	// Start the local server
 	log.Println("Server is running on port 3000")
@@ -117,11 +120,39 @@ func deleteRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get affected rows", http.StatusInternalServerError)
 		return
 	}
-	
+
 	if rowsAffected == 0 {
 		http.Error(w, "No recipe found with the given ID", http.StatusNotFound)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func createRecipe(w http.ResponseWriter, r *http.Request) {
+	var recipe Recipe
+	if err := json.NewDecoder(r.Body).Decode(&recipe); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		log.Println("Failed to decode request payload:", err)
+		return
+	}
+	defer r.Body.Close()
+
+	recipe.CreatedAt = time.Now()
+	recipe.UpdatedAt = time.Now()
+
+	query := `INSERT INTO Recipes (title, description, ingredients, instructions, created_at, updated_at)
+	          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+	err := db.QueryRow(query, recipe.Title, recipe.Description, recipe.Ingredients, recipe.Instructions, recipe.CreatedAt, recipe.UpdatedAt).Scan(&recipe.Id)
+	if err != nil {
+		http.Error(w, "Failed to create recipe", http.StatusInternalServerError)
+		log.Println("Failed to insert a new Recipe", err)
+		return
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(recipe)
+	log.Println("Successfully created a new recipe with ID:", recipe.Id)
 }
